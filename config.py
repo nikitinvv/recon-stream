@@ -1,7 +1,6 @@
 import argparse
 import configparser
 from collections import OrderedDict
-from global_vars import args, params
 
 SECTIONS = OrderedDict()
 
@@ -15,80 +14,6 @@ SECTIONS['reconstruction'] = {
         'default': -1.0,
         'type': float,
         'help': "Location of rotation axis"},
-    'center-search-width': {
-        'type': float,
-        'default': 50.0,
-        'help': "+/- center search width (pixel). "},
-    'center-search-step': {
-        'type': float,
-        'default': 0.5,
-        'help': "+/- center search step (pixel). "},
-    'nsino': {
-        'default': '0.5',
-        'type': str,
-        'help': 'Location of the sinogram used for slice reconstruction and find axis (0 top, 1 bottom). Can be given as a list, e.g. [0,0.9].'},
-    'nsino-per-chunk': {
-        'type': int,
-        'default': 8,
-        'help': "Number of sinograms per chunk. Use larger numbers with computers with larger memory. ", },
-    'nproj-per-chunk': {
-        'type': int,
-        'default': 8,
-        'help': "Number of projections per chunk. Use larger numbers with computers with larger memory.  ", },
-    'start-row': {
-        'type': int,
-        'default': 0,
-        'help': "Start slice"},
-    'end-row': {
-        'type': int,
-        'default': -1,
-        'help': "End slice"},
-    'start-column': {
-        'type': int,
-        'default': 0,
-        'help': "Start position in x"},
-    'end-column': {
-        'type': int,
-        'default': -1,
-        'help': "End position in x"},
-    'start-proj': {
-        'type': int,
-        'default': 0,
-        'help': "Start projection"},
-    'end-proj': {
-        'type': int,
-        'default': -1,
-        'help': "End projection"},
-    'nproj-per-chunk': {
-        'type': int,
-        'default': 8,
-        'help': "Number of sinograms per chunk. Use lower numbers with computers with lower GPU memory.", },
-    'rotation-axis-auto': {
-        'default': 'manual',
-        'type': str,
-        'help': "How to get rotation axis auto calculate ('auto'), or manually ('manual')",
-        'choices': ['manual', 'auto', ]},
-    'rotation-axis-pairs': {
-        'default': '[0,0]',
-        'type': str,
-        'help': "Projection pairs to find rotation axis. Each second projection in a pair will be flipped and used to find shifts from the first element in a pair. The shifts are used to calculate the center.  Example [0,1499] for a 180 deg scan, or [0,1499,749,2249] for 360, etc.", },
-    'rotation-axis-sift-threshold': {
-        'default': 0.5,
-        'type': float,
-        'help': "SIFT threshold for rotation search.", },
-    'rotation-axis-method': {
-        'default': 'sift',
-        'type': str,
-        'help': "Method for automatic rotation search.",
-        'choices': ['sift', 'vo']},
-    'find-center-start-row': {
-        'type': int,
-        'default': 0,
-        'help': "Start row to find the rotation center"},
-    'find-center-end-row': {
-        'type': int,
-        'default': -1,
-        'help': "End row to find the rotation center"},
     'dtype': {
         'default': 'float32',
         'type': str,
@@ -109,18 +34,7 @@ SECTIONS['reconstruction'] = {
         'help': "Threshold of grayscale above local median to be considered a zinger pixel"},
     'minus-log': {
         'default': 'True',
-        'help': "Take -log or not"},
-    'flat-linear': {
-        'default': 'False',
-        'help': "Interpolate flat fields for each projections, assumes the number of flat fields at the beginning of the scan is as the same as a the end."},
-    'bright-ratio': {
-        'type': float,
-        'default': 1,
-        'help': 'exposure time for flat fields divided by the exposure time of projections'},
-    'pixel-size': {
-        'default': 0,
-        'type': float,
-        'help': "Pixel size [microns]"},
+        'help': "Take -log or not"},    
 }
 
 SECTIONS['retrieve-phase'] = {
@@ -130,15 +44,15 @@ SECTIONS['retrieve-phase'] = {
         'help': "Phase retrieval correction method",
         'choices': ['none', 'paganin', 'Gpaganin']},
     'energy': {
-        'default': 0,
+        'default': 20,
         'type': float,
         'help': "X-ray energy [keV]"},
     'propagation-distance': {
-        'default': 0,
+        'default': 100,
         'type': float,
         'help': "Sample detector distance [mm]"},
     'retrieve-phase-alpha': {
-        'default': 0,
+        'default': 0.001,
         'type': float,
         'help': "Regularization parameter"},
     'retrieve-phase-delta-beta': {
@@ -153,6 +67,10 @@ SECTIONS['retrieve-phase'] = {
         'type': int,
         'default': 1,
         'help': "Padding with extra slices in z for phase-retrieval filtering"},
+    'pixel-size': {
+        'default': 1,
+        'type': float,
+        'help': "Pixel size [microns]"},
 }
 
 SECTIONS['remove-stripe'] = {
@@ -258,7 +176,7 @@ def config_to_list(config_name):
                         result.append('--{}={}'.format(name, value))
     return result
 
-def write_args(config_file):
+def write_args(config_file, args=None):
     """
     Write *config_file*
     """
@@ -287,12 +205,6 @@ def read_args(config_file):
     cmd_params = Params(sections=tomo_steps_params)
     cmd_parser = subparsers.add_parser('recon_steps', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     cmd_parser = cmd_params.add_arguments(cmd_parser)
-    values = ['recon_steps'] + config_to_list(config_name=config_file)        
-    args.__dict__.update(parser.parse_known_args(values)[0].__dict__)
-
-def init_params():
-    """
-    Initialize parameters based on args
-    """
-    global params
-    params = []
+    values = ['recon_steps'] + config_to_list(config_name=config_file)    
+    args = parser.parse_known_args(values)[0]
+    return args

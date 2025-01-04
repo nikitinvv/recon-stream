@@ -74,11 +74,11 @@ def gpu_batch(chunk=8,axis_out=0,axis_inp=0):
             for k in range(nchunk+2):
                 
                 if (k > 0 and k < nchunk+1):                    
-                    with stream2: # processing            
+                    with stream2: # processing      
                         func(cl, out_gpu[(k-1)%2], *inp_gpu[(k-1)%2], *inp[ninp:], **kwargs)       
                     
                 if (k > 1):                    
-                    with stream3:  # gpu->cpu copy                            
+                    with stream3:  # gpu->cpu copy                          
                         out_gpu[(k-2)%2].get(out=out_pinned[(k-2) % 2])
                                     
                 if (k < nchunk):
@@ -95,11 +95,11 @@ def gpu_batch(chunk=8,axis_out=0,axis_inp=0):
                                 inp_gpu[k % 2][j].set(inp_pinned[k % 2][j])                            
                 stream3.synchronize()
                 if (k > 1):
-                    st, end = (k-2)*chunk, min(size, (k-2)*chunk)
+                    st, end = (k-2)*chunk, min(size, (k-1)*chunk)                    
                     if axis_out==0:
                         copy(out_pinned[(k-2) % 2][:end-st],out[st:end])
                     if axis_out==1:
-                        copy(out_pinned[(k-2) % 2][:,:end-st],out[:,st:end])
+                        copy(out_pinned[(k-2) % 2][:,:end-st],out[:,st:end])                    
                 stream1.synchronize()
                 stream2.synchronize()                
             return
