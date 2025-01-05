@@ -1,10 +1,11 @@
 
 import cupy as cp
+import numpy as np
 import cupyx.scipy.ndimage as ndimage
 
 import remove_stripe 
 import retrieve_phase
-
+from utils import place_kernel #tmp
 
 class Proc():
     def __init__(self, args, ni, centeri, center):
@@ -43,11 +44,24 @@ class Proc():
         args = self.args
 
         if args.minus_log == 'True':
-            data[data <= 0] = 1
-            data[:] = -cp.log(data)
-            data[cp.isnan(data)] = 6.0
-            data[cp.isinf(data)] = 0
-        return data  # reuse input memory
+            ## the following python code makes device synchronization, 
+            # see warning in https://docs.cupy.dev/en/stable/reference/generated/cupy.place.html
+            # and https://github.com/cupy/cupy/blob/118ade4a146d1cc68519f7f661f2c145f0b942c9/cupy/_indexing/insert.py#L35
+
+            # data[data<=0] = 1
+            # data[:] = -cp.log(data)
+            # data[cp.isnan(data)] = 6.0
+            # data[cp.isinf(data)] = 0
+            
+            # we temporarily replace it with the code which is not synchrotnized, see place_kernel in utils
+            bs = (32,32,1)
+            gs = (int(np.ceil(data.shape[2]/bs[0])),
+                  int(np.ceil(data.shape[1]/bs[1])),
+                  int(np.ceil(data.shape[0]/bs[2])))            
+            data_tmp = cp.ascontiguousarray(data.astype('float32'))
+            place_kernel(gs, bs, (data_tmp, data.shape[2], data.shape[1], data.shape[0]))   
+            data[:] = data_tmp.astype(args.dtype)
+        return data  
 
     def pad360(self,data):
         """Pad data with 0 to handle 360 degrees scan"""

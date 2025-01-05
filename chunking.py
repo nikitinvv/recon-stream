@@ -1,40 +1,13 @@
 import cupy as cp
 import numpy as np
-from threading import Thread
+from utils import copy
 
-cp.cuda.set_pinned_memory_allocator(cp.cuda.PinnedMemoryPool().malloc)
-
-def _copy(res, u, st, end):
-    res[st:end] = u[st:end]
-
-def copy(u, res, nthreads=16):
-    nchunk = int(np.ceil(u.shape[0]/nthreads))
-    mthreads = []
-    for k in range(nthreads):
-        th = Thread(target=_copy, args=(
-            res, u, k*nchunk, min((k+1)*nchunk, u.shape[0])))
-        mthreads.append(th)
-        th.start()
-    for th in mthreads:
-        th.join()
-    return res
-
-def pinned_array(array):
-    """Allocate pinned memory and associate it with numpy array"""
-
-    mem = cp.cuda.alloc_pinned_memory(array.nbytes)
-    src = np.frombuffer(
-        mem, array.dtype, array.size).reshape(array.shape)
-    src[...] = array
-    return src
 
 def gpu_batch(chunk=8,axis_out=0,axis_inp=0):
 
     def decorator(func):
         def inner(*args, **kwargs):
-            stream1 = cp.cuda.Stream(non_blocking=False)
-            stream2 = cp.cuda.Stream(non_blocking=False)
-            stream3 = cp.cuda.Stream(non_blocking=False)
+            
             cl = args[0]
             out = args[1]
             inp = args[2:]
@@ -46,43 +19,50 @@ def gpu_batch(chunk=8,axis_out=0,axis_inp=0):
                 
             # else do processing by chunks                         
             size = out.shape[axis_out]
-            nchunk = int(np.ceil(size/chunk))
-            
+            nchunk = int(np.ceil(size/chunk/ngpus))
             # allocate memory for an ouput chunk on each gpu
             out_shape0 = list(out.shape)
             out_shape0[axis_out] = chunk
-            out_gpu = cp.empty([2,*out_shape0], dtype=out.dtype)
-            out_pinned = pinned_array(np.empty([2,*out_shape0], dtype=out.dtype))
 
-            # determine the number of inputs and allocate memory for each input chunk
-            inp_gpu = []
-            inp_pinned = []
-            ninp = 0
-            for k in range(0, len(inp)):
-                if (isinstance(inp[k], np.ndarray) or isinstance(inp[k], cp.ndarray)) and inp[k].shape[axis_inp] == size:
-                    inp_shape0 = list(inp[k].shape)
-                    inp_shape0[axis_inp] = chunk
-                    inp_gpu.append(cp.empty(inp_shape0, dtype=inp[k].dtype))
-                    inp_pinned.append(pinned_array(np.empty(inp_shape0, dtype=inp[k].dtype)))
-                    ninp += 1
-                else:
-                    break
-            inp_gpu = [inp_gpu, inp_gpu]
-            inp_pinned = [inp_pinned, inp_pinned]
+            # take memory from the buffer
+            out_gpu = cp.ndarray([2,*out_shape0], dtype=out.dtype, memptr=cl.gpu_mem)
+            out_pinned = np.frombuffer(cl.pinned_mem, out.dtype, np.prod([2,*out_shape0])).reshape([2,*out_shape0])
 
+            # shift memory pointer
+            offset = np.prod([2,*out_shape0])*np.dtype(out.dtype).itemsize
+            # determine the number of inputs and allocate memory for each input chunk            
+            inp_gpu = [[],[]]
+            inp_pinned = [[],[]]            
+            
+            for j in range(2): # do it twice to assign memory pointers
+                ninp = 0
+                for k in range(0, len(inp)):
+                    if (isinstance(inp[k], np.ndarray) or isinstance(inp[k], cp.ndarray)) and inp[k].shape[axis_inp] == size:
+                        inp_shape0 = list(inp[k].shape)
+                        inp_shape0[axis_inp] = chunk
+            
+                        # take memory from the buffers
+                        inp_gpu[j].append(cp.ndarray(inp_shape0, dtype=inp[k].dtype, memptr=cl.gpu_mem+offset))
+                        inp_pinned[j].append(np.frombuffer(cl.pinned_mem+offset, inp[k].dtype, np.prod(inp_shape0)).reshape(inp_shape0))
+                        
+                        # shift memory pointer
+                        offset += np.prod(inp_shape0)*np.dtype(inp[k].dtype).itemsize
+                        ninp += 1                        
+                    else:
+                        break            
             # run by chunks
             for k in range(nchunk+2):
                 
                 if (k > 0 and k < nchunk+1):                    
-                    with stream2: # processing      
+                    with cl.stream2: # processing      
                         func(cl, out_gpu[(k-1)%2], *inp_gpu[(k-1)%2], *inp[ninp:], **kwargs)       
                     
                 if (k > 1):                    
-                    with stream3:  # gpu->cpu copy                          
+                    with cl.stream3:  # gpu->cpu copy                          
                         out_gpu[(k-2)%2].get(out=out_pinned[(k-2) % 2])
                                     
                 if (k < nchunk):
-                    with stream1:  # copy to pinned memory
+                    with cl.stream1:  # copy to pinned memory
                         st, end = k*chunk, min(size, (k+1)*chunk)
                         for j in range(ninp):                            
                             if axis_inp==0:
@@ -90,18 +70,18 @@ def gpu_batch(chunk=8,axis_out=0,axis_inp=0):
                             elif axis_inp==1:
                                 copy(inp[j][:,st:end],inp_pinned[k % 2][j][:,:end-st])
                             
-                        with stream1:  # cpu->gpu copy
+                        with cl.stream1:  # cpu->gpu copy
                             for j in range(ninp):
                                 inp_gpu[k % 2][j].set(inp_pinned[k % 2][j])                            
-                stream3.synchronize()
+                cl.stream3.synchronize()
                 if (k > 1):
                     st, end = (k-2)*chunk, min(size, (k-1)*chunk)                    
                     if axis_out==0:
                         copy(out_pinned[(k-2) % 2][:end-st],out[st:end])
                     if axis_out==1:
                         copy(out_pinned[(k-2) % 2][:,:end-st],out[:,st:end])                    
-                stream1.synchronize()
-                stream2.synchronize()                
+                cl.stream1.synchronize()
+                cl.stream2.synchronize()                
             return
         return inner
     return decorator

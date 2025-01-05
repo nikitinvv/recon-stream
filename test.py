@@ -1,27 +1,85 @@
+#!/usr/bin/env python
+# coding: utf-8
 
-from global_vars import args, params
-from rec_stream import ReconStream
-import cupy as cp
+# In[1]:
+
+
 import numpy as np
+import cupy as cp
+# import dxchange
+import time
+# import matplotlib.pyplot as plt
 
 import config
-import dxchange
+from rec_stream import ReconStream
+
+cp.cuda.set_pinned_memory_allocator(cp.cuda.PinnedMemoryPool().malloc)
+
+
+# In[2]:
+
+
+def get_data_pars(proj, flat, dark, theta):
+    '''Get parameters of the data'''
+
+    pars = {}
+    pars['nproj'] = proj.shape[0]
+    pars['nz'] = proj.shape[1]
+    pars['n'] = proj.shape[2]
+    pars['nflat'] = flat.shape[0]
+    pars['ndark'] = dark.shape[0]
+    pars['in_dtype'] = proj.dtype
+    pars['theta'] = theta
+    if isinstance(proj, cp.ndarray):
+        pars['gpu_array'] = True
+    else:
+        pars['gpu_array'] = False
+    return pars        
+
+
+# In[3]:
+
 
 # init parameters with default values. can be done ones
 # config.write_args('test.conf')
 # read parameters
-config.read_args('test.conf')
+args = config.read_args('test.conf')
 
-proj, flat, dark, theta = dxchange.read_aps_32id('/home/beams/TOMO/conda/tomocupy/tests/data/test_data.h5')
+# proj, flat, dark, theta = dxchange.read_aps_32id('/home/beams/TOMO/conda/tomocupy/tests/data/test_data.h5')
+# proj = np.tile(proj,(1,100,1))
+# flat = np.tile(flat,(1,100,1))
+# dark = np.tile(dark,(1,100,1))
 
-[nproj,nz,n] = proj.shape
+proj = np.ones([2048,2048,2048],dtype='uint16')
+dark = np.zeros([20,2048,2048],dtype='uint16')
+flat = np.ones([10,2048,2048],dtype='uint16')
+theta = np.linspace(0,np.pi,2048).astype('float32')
+# proj = cp.array(proj)
+# flat = cp.array(flat)
+# dark = cp.array(dark)
+# theta = cp.array(theta)
 
-cl_recstream = ReconStream(nproj,nz,n,theta)
-res1 = np.empty_like(proj,dtype=args.dtype)
-cl_recstream.proc_sino(res1,proj,dark,flat)
+pars = get_data_pars(proj, flat, dark, theta)
 
-res2 = np.empty_like(proj,dtype=args.dtype)
-cl_recstream.proc_proj(res2,res1)
+# streaming reconstruction class
+cl_recstream = ReconStream(args, pars)
 
-res3 = np.empty([res2.shape[1],res2.shape[2],res2.shape[2]],dtype=args.dtype)
-cl_recstream.rec_sino(res3,res2)
+t = time.time()
+cl_recstream.proc_rec_sino(proj,dark,flat)
+print(time.time()-t)
+
+# # processing and reconstruction
+# t = time.time()
+# cl_recstream.proc_sino(proj,dark,flat)
+# print(time.time()-t)
+
+# t = time.time()
+# cl_recstream.proc_proj()
+# print(time.time()-t)
+
+# t = time.time()
+# cl_recstream.rec_sino()
+# print(time.time()-t)
+
+
+

@@ -35,6 +35,14 @@ SECTIONS['reconstruction'] = {
     'minus-log': {
         'default': 'True',
         'help': "Take -log or not"},    
+    'nsino-per-chunk': {
+        'type': int,
+        'default': 8,
+        'help': "Number of sinograms per chunk. Use larger numbers with computers with larger memory. ", },
+    'nproj-per-chunk': {
+        'type': int,
+        'default': 8,
+        'help': "Number of projections per chunk. Use larger numbers with computers with larger memory.  ", },
 }
 
 SECTIONS['retrieve-phase'] = {
