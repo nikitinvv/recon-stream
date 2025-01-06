@@ -3,18 +3,19 @@ import cupy as cp
 import numpy as np
 import cupyx.scipy.ndimage as ndimage
 
-from streamtomocupy import remove_stripe 
+from streamtomocupy import remove_stripe
 from streamtomocupy import retrieve_phase
-from streamtomocupy.utils import place_kernel #tmp
+from streamtomocupy.utils import place_kernel  # tmp
+
 
 class Proc():
     def __init__(self, args, ni, centeri, center):
         self.args = args
         self.ni = ni
-        self.centeri=centeri
-        self.center=center
+        self.centeri = centeri
+        self.center = center
 
-    def darkflat_correction(self,data, dark, flat):
+    def darkflat_correction(self, data, dark, flat):
         """Dark-flat field correction"""
         args = self.args
         dark0 = dark.astype(args.dtype, copy=False)
@@ -25,7 +26,7 @@ class Proc():
         res = (data.astype(args.dtype, copy=False)-dark0) / (flat0-dark0+1e-5)
         return res
 
-    def remove_outliers(self,data):
+    def remove_outliers(self, data):
         """Remove outliers"""
         args = self.args
 
@@ -39,12 +40,12 @@ class Proc():
                 data > fdata, (data - fdata) > args.dezinger_threshold), fdata, data)
         return data
 
-    def minus_log(self,data):
+    def minus_log(self, data):
         """Taking negative logarithm"""
         args = self.args
 
         if args.minus_log == 'True':
-            ## the following python code makes device synchronization, 
+            # the following python code makes device synchronization,
             # see warning in https://docs.cupy.dev/en/stable/reference/generated/cupy.place.html
             # and https://github.com/cupy/cupy/blob/118ade4a146d1cc68519f7f661f2c145f0b942c9/cupy/_indexing/insert.py#L35
 
@@ -52,18 +53,19 @@ class Proc():
             # data[:] = -cp.log(data)
             # data[cp.isnan(data)] = 6.0
             # data[cp.isinf(data)] = 0
-            
+
             # we temporarily replace it with the code which is not synchrotnized, see place_kernel in utils
-            bs = (32,32,1)
+            bs = (32, 32, 1)
             gs = (int(np.ceil(data.shape[2]/bs[0])),
                   int(np.ceil(data.shape[1]/bs[1])),
-                  int(np.ceil(data.shape[0]/bs[2])))            
+                  int(np.ceil(data.shape[0]/bs[2])))
             data_tmp = cp.ascontiguousarray(data.astype('float32'))
-            place_kernel(gs, bs, (data_tmp, data.shape[2], data.shape[1], data.shape[0]))   
+            place_kernel(
+                gs, bs, (data_tmp, data.shape[2], data.shape[1], data.shape[0]))
             data[:] = data_tmp.astype(args.dtype)
-        return data  
+        return data
 
-    def pad360(self,data):
+    def pad360(self, data):
         """Pad data with 0 to handle 360 degrees scan"""
         args = self.args
 
@@ -77,22 +79,26 @@ class Proc():
             v = v**5*(126-420*v+540*v**2-315*v**3+70*v**4)
             data[:, :, -w:] *= v
             # double sinogram size with adding 0
-            data = cp.pad(data, ((0, 0), (0, 0), (0, data.shape[-1])), 'constant')
+            data = cp.pad(
+                data, ((0, 0), (0, 0), (0, data.shape[-1])), 'constant')
         return data
 
-    def remove_stripe(self,res):
+    def remove_stripe(self, res):
         """Remove stripes"""
         args = self.args
 
         if args.remove_stripe_method == 'fw':
-            res[:] = remove_stripe.remove_stripe_fw(res, args.fw_sigma, args.fw_filter, args.fw_level)
+            res[:] = remove_stripe.remove_stripe_fw(
+                res, args.fw_sigma, args.fw_filter, args.fw_level)
         elif args.remove_stripe_method == 'ti':
-            res[:] = remove_stripe.remove_stripe_ti(res, args.ti_beta, args.ti_mask)
+            res[:] = remove_stripe.remove_stripe_ti(
+                res, args.ti_beta, args.ti_mask)
         elif args.remove_stripe_method == 'vo-all':
-            res[:] = remove_stripe.remove_all_stripe(res, args.vo_all_snr, args.vo_all_la_size, args.vo_all_sm_size, args.vo_all_dim)
+            res[:] = remove_stripe.remove_all_stripe(
+                res, args.vo_all_snr, args.vo_all_la_size, args.vo_all_sm_size, args.vo_all_dim)
         return res
 
-    def retrieve_phase(self,data):        
+    def retrieve_phase(self, data):
         """Retrieve phase"""
         args = self.args
 

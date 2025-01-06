@@ -10,6 +10,11 @@ SECTIONS['reconstruction'] = {
         'type': str,
         'help': "Input file type",
         'choices': ['standard', 'double_fov']},
+    'reconstruction-algorithm': {
+        'default': 'fourierrec',
+        'type': str,
+        'help': "Reconstruction algorithm",
+        'choices': ['fourierrec', 'lprec', 'linerec']},
     'rotation-axis': {
         'default': -1.0,
         'type': float,
@@ -34,7 +39,7 @@ SECTIONS['reconstruction'] = {
         'help': "Threshold of grayscale above local median to be considered a zinger pixel"},
     'minus-log': {
         'default': 'True',
-        'help': "Take -log or not"},    
+        'help': "Take -log or not"},
     'nsino-per-chunk': {
         'type': int,
         'default': 8,
@@ -145,6 +150,7 @@ SECTIONS['ti'] = {
 RECON_STEPS_PARAMS = ('reconstruction', 'remove-stripe',
                       'retrieve-phase', 'fw', 'ti', 'vo-all')
 
+
 class Params(object):
     def __init__(self, sections=()):
         self.sections = sections
@@ -163,6 +169,7 @@ class Params(object):
         parser = argparse.ArgumentParser()
         self.add_arguments(parser)
         return parser.parse_args('')
+
 
 def config_to_list(config_name):
     """
@@ -188,6 +195,7 @@ def config_to_list(config_name):
                         result.append('--{}={}'.format(name, value))
     return result
 
+
 def write_args(config_file, args=None):
     """
     Write *config_file*
@@ -207,6 +215,7 @@ def write_args(config_file, args=None):
     with open(config_file, 'w') as f:
         config.write(f)
 
+
 def read_args(config_file):
     """
     Read *config_file* 
@@ -215,8 +224,9 @@ def read_args(config_file):
     tomo_steps_params = RECON_STEPS_PARAMS
     subparsers = parser.add_subparsers(title="Commands", metavar='')
     cmd_params = Params(sections=tomo_steps_params)
-    cmd_parser = subparsers.add_parser('recon_steps', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    cmd_parser = subparsers.add_parser(
+        'recon_steps', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     cmd_parser = cmd_params.add_arguments(cmd_parser)
-    values = ['recon_steps'] + config_to_list(config_name=config_file)    
+    values = ['recon_steps'] + config_to_list(config_name=config_file)
     args = parser.parse_known_args(values)[0]
     return args

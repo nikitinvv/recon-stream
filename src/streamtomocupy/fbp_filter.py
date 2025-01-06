@@ -1,7 +1,7 @@
-from streamtomocupy import cfunc_filter
-from streamtomocupy import cfunc_filterfp16
 import cupy as cp
 
+from streamtomocupy import cfunc_filter
+from streamtomocupy import cfunc_filterfp16
 
 class FBPFilter():
     def __init__(self, n, ntheta, nz, dtype):

@@ -42,7 +42,7 @@ void __global__ backprojection_ker(real *f, real *data, float *theta, float phi,
                     data[ur+1+t*n+(vr+1)*n*nproj]*static_cast<real>((0+u)*(0+v));
         }
     }
-    f[tx + (n-ty-1) * n + tz * n * n] += static_cast<real>((float)f0*c);        
+    f[tx + (n-ty-1) * n + tz * n * n] = static_cast<real>((float)f0*c);        
 }    
 
 void __global__ backprojection_try_ker(real *f, real *data, float *theta, float phi, float c, int sz, float* sh, int ncz, int n, int nz, int nproj)
