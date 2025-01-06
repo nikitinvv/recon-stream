@@ -1,0 +1,7 @@
+*.nsys*
+_skbuild/*
+*cfunc*.py
+*.so
+*.pyc
+*.egg*
+.loglogin
