@@ -63,9 +63,9 @@ print(time.time()-t)
 res = cl_recstream.get_res()
 t = time.time()
 cl_recstream.proc_sino(res[0], proj, dark, flat)
+cl_recstream.proc_proj(res[1], res[0])
+cl_recstream.rec_sino(res[2], res[1], theta)
 print(time.time()-t)
-# cl_recstream.proc_proj(res[1], res[0])
-# cl_recstream.rec_sino(res[2], res[1], theta)
 
 
 # # processing and reconstruction
