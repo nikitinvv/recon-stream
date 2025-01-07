@@ -61,17 +61,17 @@ cl_recstream = streamrecon.StreamRecon(args)
 print(time.time()-t)
 
 res = cl_recstream.get_res()
-t = time.time()
-cl_recstream.proc_sino(res[0], proj, dark, flat)
-cl_recstream.proc_proj(res[1], res[0])
-cl_recstream.rec_sino(res[2], res[1], theta)
-print(time.time()-t)
-
-
-# # processing and reconstruction
 # t = time.time()
-# cl_recstream.rec(proj, dark, flat, theta)
+# cl_recstream.proc_sino(res[0], proj, dark, flat)
+# cl_recstream.proc_proj(res[1], res[0])
+# cl_recstream.rec_sino(res[2], res[1], theta)
 # print(time.time()-t)
+
+
+# processing and reconstruction
+t = time.time()
+cl_recstream.rec(proj, dark, flat, theta)
+print(time.time()-t)
 
 # t = time.time()
 # cl_recstream.rec_steps(proj, dark, flat, theta)
