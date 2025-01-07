@@ -110,7 +110,7 @@ def run(out, inp, chunk, proper, nonproper, axis_out, axis_inp, cl, func, igpu, 
 
         if (k > 1):
             with stream[2]:  # gpu->cpu copy
-                out_gpu[(k-2) % 2].get(out=out_pinned[(k-2) % 2])
+                out_gpu[(k-2) % 2].get(out=out_pinned[(k-2) % 2],blocking=False)
 
         if (k < nchunk):
             with stream[0]:  # copy to pinned memory
