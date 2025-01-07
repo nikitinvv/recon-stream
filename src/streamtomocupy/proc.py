@@ -9,12 +9,9 @@ from streamtomocupy.utils import place_kernel  # tmp
 
 
 class Proc():
-    def __init__(self, args, ni, centeri, center):
+    def __init__(self, args):
         self.args = args
-        self.ni = ni
-        self.centeri = centeri
-        self.center = center
-
+        
     def darkflat_correction(self, data, dark, flat):
         """Dark-flat field correction"""
         args = self.args
@@ -65,28 +62,10 @@ class Proc():
             data[:] = data_tmp.astype(args.dtype)
         return data
 
-    def pad360(self, data):
-        """Pad data with 0 to handle 360 degrees scan"""
-        args = self.args
-
-        if args.file_type == 'double_fov':
-            if (self.centeri < self.ni//2):
-                # if rotation center is on the left side of the ROI
-                data[:] = data[:, :, ::-1]
-            w = max(1, int(2*(self.ni-self.center)))
-            # smooth transition at the border
-            v = cp.linspace(1, 0, w, endpoint=False)
-            v = v**5*(126-420*v+540*v**2-315*v**3+70*v**4)
-            data[:, :, -w:] *= v
-            # double sinogram size with adding 0
-            data = cp.pad(
-                data, ((0, 0), (0, 0), (0, data.shape[-1])), 'constant')
-        return data
-
     def remove_stripe(self, res):
         """Remove stripes"""
         args = self.args
-
+        
         if args.remove_stripe_method == 'fw':
             res[:] = remove_stripe.remove_stripe_fw(
                 res, args.fw_sigma, args.fw_filter, args.fw_level)

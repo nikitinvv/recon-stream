@@ -1,9 +1,7 @@
 import cupy as cp
 import numpy as np
-from threading import Thread
-
 from streamtomocupy.utils import copy
-
+from concurrent.futures import ThreadPoolExecutor, wait
 
 def gpu_batch(chunk=8, ngpus=1, axis_out=0, axis_inp=0):
     def decorator(func):
@@ -14,8 +12,9 @@ def gpu_batch(chunk=8, ngpus=1, axis_out=0, axis_inp=0):
             inp = args[2:]
 
             size = out.shape[axis_out]
-            gsize = int(np.ceil(size/ngpus))
-
+            ngpus_adj = min(int(np.ceil(size/chunk)),ngpus)
+            gsize = int(np.ceil(size/ngpus_adj))
+            
             proper = 0
             nonproper = 0
             for k in range(0, len(inp)):
@@ -26,34 +25,33 @@ def gpu_batch(chunk=8, ngpus=1, axis_out=0, axis_inp=0):
                 elif (isinstance(inp[k], np.ndarray) or isinstance(inp[k], cp.ndarray)):
                     # arrays of nonproper shape for processing by chunks
                     nonproper += 1
-
-            mthreads = []
-            for igpu in range(ngpus):
+            
+            pool = ThreadPoolExecutor(ngpus_adj)
+            futures=[]
+            for igpu in range(ngpus_adj):
 
                 if axis_out == 0:
                     gout = out[igpu*gsize:(igpu+1)*gsize]
                 if axis_out == 1:
                     gout = out[:, igpu*gsize:(igpu+1)*gsize]
+                if np.prod(gout.shape)==0:
+                    break
                 if axis_inp == 0:
                     ginp = [x[igpu*gsize:(igpu+1)*gsize] for x in inp[:proper]]
                     if len(inp[proper:]) > 0:
-                        ginp.append(inp[proper:])
+                        ginp.extend(inp[proper:])
                 if axis_inp == 1:
                     ginp = [x[:, igpu*gsize:(igpu+1)*gsize]
                             for x in inp[:proper]]
                     if len(inp[proper:]) > 0:
-                        ginp.append(inp[proper:])
-
-                th = Thread(target=run, args=(
+                        ginp.extend(inp[proper:])
+                
+                futures.append(pool.submit(run,
                     gout, ginp, chunk,
                     proper, nonproper,
                     axis_out, axis_inp,
-                    cl, func, igpu, ngpus))
-
-                mthreads.append(th)
-                th.start()
-            for th in mthreads:
-                th.join()
+                    cl, func, igpu, ngpus_adj))               
+            wait(futures)
         return inner
     return decorator
 
@@ -99,6 +97,9 @@ def run(out, inp, chunk, proper, nonproper, axis_out, axis_inp, cl, func, igpu, 
     for k in range(proper, proper+nonproper):
         inp[k] = cp.asarray(inp[k])
 
+    pool_inp = ThreadPoolExecutor(16//ngpus)
+    pool_out = ThreadPoolExecutor(16//ngpus)
+    # proper=1
     # run by chunks
     for k in range(nchunk+2):
 
@@ -117,10 +118,10 @@ def run(out, inp, chunk, proper, nonproper, axis_out, axis_inp, cl, func, igpu, 
                 for j in range(proper):
                     if axis_inp == 0:
                         copy(inp[j][st:end], inp_pinned[k %
-                             2][j][:end-st], 16//ngpus)
+                             2][j][:end-st], pool_inp)
                     elif axis_inp == 1:
                         copy(inp[j][:, st:end], inp_pinned[k %
-                             2][j][:, :end-st], 16//ngpus)
+                             2][j][:, :end-st], pool_inp)
 
                 with stream[0]:  # cpu->gpu copy
                     for j in range(proper):
@@ -129,10 +130,10 @@ def run(out, inp, chunk, proper, nonproper, axis_out, axis_inp, cl, func, igpu, 
         if (k > 1):
             st, end = (k-2)*chunk, min(size, (k-1)*chunk)
             if axis_out == 0:
-                copy(out_pinned[(k-2) % 2][:end-st], out[st:end], 16//ngpus)
+                copy(out_pinned[(k-2) % 2][:end-st], out[st:end], pool_out)
             if axis_out == 1:
                 copy(out_pinned[(k-2) % 2][:, :end-st],
-                     out[:, st:end], 16//ngpus)
+                     out[:, st:end], pool_out)
         stream[0].synchronize()
         stream[1].synchronize()
     return

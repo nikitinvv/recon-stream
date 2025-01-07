@@ -5,10 +5,9 @@ from concurrent.futures import ThreadPoolExecutor,wait
 import time
 def _copy(res, u, st, end):
     res[st:end] = u[st:end]
-    time.sleep(1)
+    
 
-
-def copy(u, res, nthreads=16):
+def copy(u, res, nthreads=2):
     nchunk = int(np.ceil(u.shape[0]/nthreads))
     mthreads = []
     for k in range(nthreads):
@@ -25,20 +24,25 @@ def copy(u, res, nthreads=16):
 #     res[ind] = u[ind]
 
 
-def copy(u, res, nthreads=16):
-    nchunk = int(np.ceil(u.shape[0]/nthreads))
-    futures = [pool.submit(_copy, res, u, k*nchunk, min((k+1)*nchunk, u.shape[0])) for k in range(nthreads)]        
-    wait(futures)
-    return res
-a = np.zeros([1024,2048,2048])
+# def copy(u, res, nthreads=16):
+#     nchunk = int(np.ceil(u.shape[0]/nthreads))
+#     futures = [pool.submit(_copy, res, u, k*nchunk, min((k+1)*nchunk, u.shape[0])) for k in range(nthreads)]        
+#     wait(futures)
+#     return res
 
+
+# b = np.empty_like(a)
+# t=time.time()
+# for k in range(100):
+#     pool = ThreadPoolExecutor(16)
+
+
+
+a = np.zeros([1024,2048,2048])
 b = np.empty_like(a)
+
 t=time.time()
-for k in range(100):
-    pool = ThreadPoolExecutor(16)
-print(time.time()-t)
-t=time.time()
+
 copy(a,b)
-# a[:]=b[:]
+# b[:]=a[:]
 print(time.time()-t)
-# print(a[-1,-1,-5:])

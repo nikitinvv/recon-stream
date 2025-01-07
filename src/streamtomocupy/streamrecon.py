@@ -17,37 +17,28 @@ class StreamRecon():
         ndark = args.ndark
         in_dtype = args.in_dtype
         ngpus = args.ngpus
-        centeri = args.rotation_axis
-
-        # adjust for 360 deg scan
-        if centeri == -1:
-            centeri = ni/2
-
+        
         if (args.file_type == 'double_fov'):
             n = 2*ni
-            if (centeri < ni//2):  # if rotation center is on the left side of the ROI
-                center = ni-centeri
-            else:
-                center = centeri
         else:
             n = ni
-            center = centeri
-
+        
         # chunk sizes
         ncz = args.nsino_per_chunk
         ncproj = args.nproj_per_chunk
 
         # allocate gpu and pinned memory buffers
         # calculate max buffer size
-        nbytes1 = 2*(nproj*ncz*ni+nflat*ncz*ni+ndark*ncz*ni) * \
-            np.dtype(in_dtype).itemsize
+        nbytes1 = 2*(nproj*ncz*ni+nflat*ncz*ni+ndark*ncz*ni)*np.dtype(in_dtype).itemsize
         nbytes1 += 2*(nproj*ncz*ni)*np.dtype(args.dtype).itemsize
+        
         nbytes2 = 2*(ncproj*nz*ni)*np.dtype(args.dtype).itemsize
-        nbytes2 += 2*(ncproj*nz*n)*np.dtype(args.dtype).itemsize
-        nbytes3 = 2*(nproj*ncz*n)*np.dtype(args.dtype).itemsize
+        nbytes2 += 2*(ncproj*nz*ni)*np.dtype(args.dtype).itemsize
+        
+        nbytes3 = 2*(nproj*ncz*ni)*np.dtype(args.dtype).itemsize
         nbytes3 += 2*(ncz*n*n)*np.dtype(args.dtype).itemsize
-        nbytes4 = 2*(nproj*ncz*ni+nflat*ncz*ni+ndark*ncz*ni) * \
-            np.dtype(in_dtype).itemsize
+        
+        nbytes4 = 2*(nproj*ncz*ni+nflat*ncz*ni+ndark*ncz*ni)*np.dtype(in_dtype).itemsize
         nbytes4 += 2*(ncz*n*n)*np.dtype(args.dtype).itemsize
         nbytes = max(nbytes1, nbytes2, nbytes3, nbytes4)
 
@@ -64,19 +55,23 @@ class StreamRecon():
                     self.stream[igpu][k] = cp.cuda.Stream(non_blocking=False)
 
         # classes for processing
-        self.cl_rec = rec.Rec(args, nproj, ncz, n, center, ngpus)
-        self.cl_proc = proc.Proc(args, ni, centeri, center)
+        self.cl_rec = rec.Rec(args, nproj, ncz, n, ni, ngpus)
+        self.cl_proc = proc.Proc(args)
 
         # intermediate arrays with results
         self.res = [None]*3
         self.res[0] = np.empty([nproj, nz, ni], dtype=args.dtype)
-        self.res[1] = np.empty([nproj, nz, n], dtype=args.dtype)
+        self.res[1] = np.empty([nproj, nz, ni], dtype=args.dtype)
         self.res[2] = np.empty([nz, n, n], dtype=args.dtype)
 
         # gpu batch parameters
         self.ncz = ncz
         self.ncproj = ncproj
         self.ngpus = ngpus
+        self.ni = ni
+        self.args = args
+
+        print('class created')
 
     def proc_sino(self, res, data, dark, flat):
         @gpu_batch(self.ncz, self.ngpus, axis_out=1, axis_inp=1)
@@ -97,17 +92,17 @@ class StreamRecon():
 
             self.cl_proc.retrieve_phase(data)
             self.cl_proc.minus_log(data)
-            res[:] = self.cl_proc.pad360(data)
+            res[:] = data[:]
         return _proc_proj(self, res, data)
 
     def rec_sino(self, res, data, theta):
         @gpu_batch(self.ncz, self.ngpus, axis_out=0, axis_inp=1)
         def _rec_sino(self, res, data, theta):
-            """Filtered backprojection with sinogram data chunks"""
-
-            data = cp.ascontiguousarray(data.swapaxes(0, 1))
-            self.cl_rec.fbp_filter_center(data)
-            self.cl_rec.rec(res, data, theta)
+            """Filtered backprojection with sinogram data chunks"""            
+            data = cp.ascontiguousarray(data.swapaxes(0, 1))                    
+            data = self.cl_rec.pad360(data)  # may change data shape                  
+            self.cl_rec.fbp_filter_center(data)            
+            self.cl_rec.backprojection(res, data, theta)            
         return _rec_sino(self, res, data, theta)
 
     def rec(self, data, dark, flat, theta):
@@ -118,25 +113,22 @@ class StreamRecon():
             self.cl_proc.remove_outliers(data)
             self.cl_proc.remove_outliers(dark)
             self.cl_proc.remove_outliers(flat)
-            data = self.cl_proc.darkflat_correction(
-                data, dark, flat)  # may change data type
+            data = self.cl_proc.darkflat_correction(data, dark, flat)  # may change data type            
             self.cl_proc.remove_stripe(data)
-            self.cl_proc.minus_log(data)
-            data = self.cl_proc.pad360(data)  # may change data shape
-            data = cp.ascontiguousarray(data.swapaxes(0, 1))
-            self.cl_rec.fbp_filter_center(data)
-            self.cl_rec.rec(res, data, theta)
+            self.cl_proc.minus_log(data)            
+            data = cp.ascontiguousarray(data.swapaxes(0, 1))            
+            data = self.cl_rec.pad360(data)  # may change data shape            
+            self.cl_rec.fbp_filter_center(data)                        
+            self.cl_rec.backprojection(res, data, theta)
         return _rec(self, self.res[2], data, dark, flat, theta)
 
     def rec_steps(self, data, dark, flat, theta):
         """Processing with sinogram and projection data chunks, 
         filtered backprojection with sinogram data chunks"""
-
         self.proc_sino(self.res[0], data, dark, flat)
         self.proc_proj(self.res[1], self.res[0])
         self.rec_sino(self.res[2], self.res[1], theta)
 
-    def get_res(self, step=2):
-        """Get result for each step"""
-
-        return self.res[step]
+    def get_res(self):
+        """Get intermediate results for each step"""
+        return self.res
