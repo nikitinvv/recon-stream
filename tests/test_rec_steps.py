@@ -6,8 +6,6 @@ import h5py
 from streamtomocupy import config
 from streamtomocupy import streamrecon
 
-cp.cuda.set_pinned_memory_allocator(cp.cuda.PinnedMemoryPool().malloc)
-
 
 def get_data_pars(args, proj, flat, dark):
     '''Get parameters of the data'''

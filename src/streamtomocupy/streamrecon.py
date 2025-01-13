@@ -5,6 +5,7 @@ from streamtomocupy import rec
 from streamtomocupy import proc
 from streamtomocupy.chunking import gpu_batch
 
+cp.cuda.set_pinned_memory_allocator(cp.cuda.PinnedMemoryPool().malloc)
 
 class StreamRecon():
     """Streaming reconstruction"""
